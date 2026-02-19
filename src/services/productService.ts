@@ -100,5 +100,31 @@ export const productService = {
     async delete(id: string): Promise<void> {
         await new Promise((resolve) => setTimeout(resolve, 500));
         MOCK_PRODUCTS = MOCK_PRODUCTS.filter(p => p.id !== id);
+    },
+
+    // FUNÇÃO: Atualizar Estoque (Chamado pelas Movimentações) ---
+    async updateStock(id: string, quantityChange: number): Promise<void> {
+        // quantityChange pode ser positivo (Entrada) ou negativo (Saída)
+
+        const index = MOCK_PRODUCTS.findIndex(p => p.id === id);
+        if (index === -1) return; // Produto não achado (ignora)
+
+        const product = MOCK_PRODUCTS[index];
+        const newQuantity = product.quantity + quantityChange;
+
+        // Recalcula Status
+        let newStatus: Product['status'] = 'IN_STOCK';
+        if (newQuantity <= 0) newStatus = 'OUT_OF_STOCK';
+        else if (newQuantity < product.minLevel) newStatus = 'LOW_STOCK';
+
+        // Atualiza o Mock em memória
+        MOCK_PRODUCTS[index] = {
+            ...product,
+            quantity: newQuantity,
+            status: newStatus,
+            lastUpdated: new Date().toISOString()
+        };
+
+        console.log(`Estoque atualizado: ${product.name} agora tem ${newQuantity}`);
     }
 };

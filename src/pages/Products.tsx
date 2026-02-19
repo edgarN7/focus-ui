@@ -16,12 +16,13 @@ import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 
 import { useAuth } from '@/hooks/useAuth';
 import { productService } from '@/services/productService';
+import { movementService } from '@/services/movementService';
 import type { Product } from '@/types/product';
 
 // Schema
 const productSchema = z.object({
     name: z.string().min(3, 'Nome deve ter no mínimo 3 caracteres'),
-    sku: z.string().min(3, 'SKU obrigatório'),
+    sku: z.string().min(7, 'SKU obrigatório (ex: MAT-001)'),
     category: z.string().min(1, 'Selecione uma categoria'),
     quantity: z.coerce.number().min(0, 'Qtd inválida'),
     minLevel: z.coerce.number().min(1, 'Nível mínimo inválido'),
@@ -29,7 +30,7 @@ const productSchema = z.object({
 });
 
 const CATEGORIES = ['Acabamento', 'Alvenaria', 'Elétrica', 'EPI', 'Estrutural', 'Ferramentas', 'Hidráulica', 'Metalurgia'];
-const UNITS = ['un', 'kg', 'm', 'm²', 'm³', 'barras', 'cx', 'litros', 'rolos', 'sacos'];
+const UNITS = ['kg', 'm', 'm²', 'm³', 'un', 'barras', 'cx', 'litros', 'rolos', 'sacos'];
 
 export default function Products() {
     const { user } = useAuth();
@@ -52,6 +53,7 @@ export default function Products() {
         handleSubmit,
         reset,
         watch,
+        setError,
         formState: { errors, isSubmitting },
     } = useForm({
         resolver: zodResolver(productSchema),
@@ -98,14 +100,51 @@ export default function Products() {
     const handleCloseModal = () => setOpenModal(false);
 
     const onSubmit = async (data: any) => {
+        // --- VALIDAÇÃO DE DUPLICIDADE ---
+
+        // 1. Verifica Nome (Case insensitive: "Cimento" == "cimento")
+        const nameExists = products.some(p =>
+            p.name.toLowerCase() === data.name.toLowerCase() &&
+            p.id !== editingId // Ignora o próprio item se estiver editando
+        );
+
+        if (nameExists) {
+            setError('name', { type: 'manual', message: 'Já existe um produto com este nome.' });
+            return; // Para a execução aqui
+        }
+
+        // 2. Verifica SKU (Exato)
+        const skuExists = products.some(p =>
+            p.sku === data.sku &&
+            p.id !== editingId
+        );
+
+        if (skuExists) {
+            setError('sku', { type: 'manual', message: 'Este código SKU já está em uso.' });
+            return; // Para a execução aqui
+        }
+
+        // --- SE PASSOU, SALVA ---
         try {
             if (editingId) {
-                // Lógica de Atualização
                 await productService.update(editingId, data);
                 setToast({ open: true, message: 'Item atualizado com sucesso!', severity: 'success' });
             } else {
-                // Lógica de Criação
-                await productService.create(data);
+                // 1. Cria o Produto
+                const newProduct = await productService.create(data);
+
+                // 2. REGRA DE NEGÓCIO: Se nasceu com estoque, gera movimentação e avisa para não somar novamente
+                if (data.quantity > 0) {
+                    await movementService.create({
+                        productId: newProduct.id,
+                        productName: newProduct.name,
+                        type: 'IN',
+                        quantity: data.quantity,
+                        userName: user?.name || 'Admin (Cadastro Inicial)',
+                        skipStockUpdate: true
+                    });
+                }
+
                 setToast({ open: true, message: 'Item cadastrado com sucesso!', severity: 'success' });
             }
             handleCloseModal();
