@@ -1,22 +1,26 @@
 import { useEffect, useState } from 'react';
+import type { MouseEvent } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import {
     Typography, Button, Avatar, IconButton, Tooltip, CircularProgress,
     Dialog, DialogTitle, DialogContent, DialogActions, TextField, MenuItem,
-    Snackbar, Alert
+    Snackbar, Alert, Menu, ListItemIcon, ListItemText, DialogContentText
 } from '@mui/material';
 import Grid from '@mui/material/Grid';
 import AddIcon from '@mui/icons-material/Add';
 import MoreVertIcon from '@mui/icons-material/MoreVert';
 import BlockIcon from '@mui/icons-material/Block';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
+import EditIcon from '@mui/icons-material/Edit';
+import DeleteIcon from '@mui/icons-material/Delete';
+import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 
 import { userService } from '@/services/userService';
 import type { UserWithStatus } from '@/services/userService';
 
-// 1. Schema de Validação
+// Schema
 const userSchema = z.object({
     name: z.string().min(3, 'Nome completo é obrigatório'),
     email: z.string().regex(/^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$/, { message: 'E-mail inválido' }),
@@ -30,8 +34,15 @@ export default function Users() {
     const [users, setUsers] = useState<UserWithStatus[]>([]);
     const [loading, setLoading] = useState(true);
 
-    // Estados do Modal e Feedback
+    // Estados de UI
     const [openModal, setOpenModal] = useState(false);
+    const [editingId, setEditingId] = useState<string | null>(null);
+    const [deleteId, setDeleteId] = useState<string | null>(null);
+
+    // Estado do Menu (Dropdown)
+    const [menuAnchor, setMenuAnchor] = useState<null | HTMLElement>(null);
+    const [selectedUser, setSelectedUser] = useState<UserWithStatus | null>(null);
+
     const [toast, setToast] = useState<{ open: boolean, message: string, severity: 'success' | 'error' }>({
         open: false, message: '', severity: 'success'
     });
@@ -45,9 +56,7 @@ export default function Users() {
         formState: { errors, isSubmitting },
     } = useForm({
         resolver: zodResolver(userSchema),
-        defaultValues: {
-            role: 'OPERATOR' // Valor padrão seguro
-        }
+        defaultValues: { role: 'OPERATOR' }
     });
 
     const loadData = async () => {
@@ -59,41 +68,86 @@ export default function Users() {
 
     useEffect(() => { loadData(); }, []);
 
-    // Handlers
-    const handleOpen = () => {
+    // --- HANDLERS DO MENU ---
+    const handleMenuOpen = (event: MouseEvent<HTMLElement>, user: UserWithStatus) => {
+        setMenuAnchor(event.currentTarget);
+        setSelectedUser(user);
+    };
+
+    const handleMenuClose = () => {
+        setMenuAnchor(null);
+        setSelectedUser(null);
+    };
+
+    // --- HANDLERS DE CRIAÇÃO / EDIÇÃO ---
+    const handleOpenCreate = () => {
+        setEditingId(null);
         reset({ role: 'OPERATOR', name: '', email: '', department: '' });
         setOpenModal(true);
     };
 
-    const handleClose = () => setOpenModal(false);
+    const handleOpenEdit = () => {
+        if (!selectedUser) return;
+        setEditingId(selectedUser.id);
+        reset({
+            name: selectedUser.name,
+            email: selectedUser.email,
+            department: selectedUser.department,
+            role: selectedUser.role
+        });
+        handleMenuClose(); // Fecha o menu
+        setOpenModal(true);
+    };
+
+    const handleCloseModal = () => setOpenModal(false);
 
     const onSubmit = async (data: UserFormInputs) => {
-        // --- VALIDAÇÃO DE DUPLICIDADE ---
-
-        // 1. Verifica E-mail (Case insensitive)
-        const emailExists = users.some(u => u.email.toLowerCase() === data.email.toLowerCase());
-
+        // Validação de Duplicidade (Ignorando o próprio usuário se for edição)
+        const emailExists = users.some(u => u.email.toLowerCase() === data.email.toLowerCase() && u.id !== editingId);
         if (emailExists) {
-            setError('email', { type: 'manual', message: 'Este e-mail já está cadastrado no sistema.' });
-            return; // Para a execução
+            setError('email', { type: 'manual', message: 'Este e-mail já está cadastrado.' });
+            return;
         }
 
-        // 2. Verifica Nome (Case insensitive)
-        const nameExists = users.some(u => u.name.toLowerCase() === data.name.toLowerCase());
-
+        const nameExists = users.some(u => u.name.toLowerCase() === data.name.toLowerCase() && u.id !== editingId);
         if (nameExists) {
             setError('name', { type: 'manual', message: 'Já existe um colaborador com este nome.' });
-            return; // Para a execução
+            return;
         }
 
-        // --- SE PASSOU, SALVA ---
         try {
-            await userService.create(data);
-            setToast({ open: true, message: 'Usuário adicionado à equipe!', severity: 'success' });
-            handleClose();
+            if (editingId) {
+                await userService.update(editingId, data);
+                setToast({ open: true, message: 'Dados do usuário atualizados!', severity: 'success' });
+            } else {
+                await userService.create(data);
+                setToast({ open: true, message: 'Usuário adicionado à equipe!', severity: 'success' });
+            }
+            handleCloseModal();
             loadData();
         } catch (error) {
-            setToast({ open: true, message: 'Erro ao criar usuário.', severity: 'error' });
+            setToast({ open: true, message: 'Erro ao salvar dados.', severity: 'error' });
+        }
+    };
+
+    // --- HANDLERS DE EXCLUSÃO ---
+    const handleOpenDelete = () => {
+        if (selectedUser) {
+            setDeleteId(selectedUser.id);
+            handleMenuClose();
+        }
+    };
+
+    const confirmDelete = async () => {
+        if (!deleteId) return;
+        try {
+            await userService.delete(deleteId);
+            setToast({ open: true, message: 'Usuário removido da equipe.', severity: 'success' });
+            loadData();
+        } catch (error) {
+            setToast({ open: true, message: 'Erro ao remover usuário.', severity: 'error' });
+        } finally {
+            setDeleteId(null);
         }
     };
 
@@ -114,12 +168,8 @@ export default function Users() {
                 <Button
                     variant="contained"
                     startIcon={<AddIcon />}
-                    onClick={handleOpen}
-                    sx={{
-                        bgcolor: 'primary.main',
-                        color: 'white', fontWeight: 'bold', boxShadow: 'none',
-                        '&:hover': { bgcolor: 'primary.dark' }
-                    }}
+                    onClick={handleOpenCreate}
+                    sx={{ bgcolor: 'primary.main', color: 'white', fontWeight: 'bold', boxShadow: 'none', '&:hover': { bgcolor: 'primary.dark' } }}
                 >
                     NOVO USUÁRIO
                 </Button>
@@ -146,13 +196,7 @@ export default function Users() {
                                 {users.map((user) => (
                                     <tr key={user.id} className="hover:bg-concrete-50 transition-colors group">
                                         <td className="p-4">
-                                            <Avatar
-                                                sx={{
-                                                    bgcolor: user.role === 'ADMIN' ? '#D4AF37' : '#E5E7EB',
-                                                    color: user.role === 'ADMIN' ? '#023020' : '#4B5563',
-                                                    fontWeight: 'bold', width: 40, height: 40, borderRadius: 1
-                                                }}
-                                            >
+                                            <Avatar sx={{ bgcolor: user.role === 'ADMIN' ? '#D4AF37' : '#E5E7EB', color: user.role === 'ADMIN' ? '#023020' : '#4B5563', fontWeight: 'bold', width: 40, height: 40, borderRadius: 1 }}>
                                                 {user.avatar}
                                             </Avatar>
                                         </td>
@@ -174,7 +218,11 @@ export default function Users() {
                                             )}
                                         </td>
                                         <td className="p-4 text-right">
-                                            <IconButton size="small" className="text-concrete-400 hover:text-brand-dark">
+                                            <IconButton
+                                                size="small"
+                                                className="text-concrete-400 hover:text-brand-dark"
+                                                onClick={(e) => handleMenuOpen(e, user)} // Abre o menu
+                                            >
                                                 <MoreVertIcon fontSize="small" />
                                             </IconButton>
                                         </td>
@@ -186,11 +234,31 @@ export default function Users() {
                 )}
             </div>
 
-            {/* --- MODAL DE NOVO USUÁRIO --- */}
-            <Dialog open={openModal} onClose={handleClose} maxWidth="sm" fullWidth>
+            {/* --- MENU DE AÇÕES (DROPDOWN) --- */}
+            <Menu
+                anchorEl={menuAnchor}
+                open={Boolean(menuAnchor)}
+                onClose={handleMenuClose}
+                PaperProps={{
+                    elevation: 3,
+                    sx: { minWidth: 150, borderRadius: 1, border: '1px solid #E5E7EB' }
+                }}
+            >
+                <MenuItem onClick={handleOpenEdit}>
+                    <ListItemIcon><EditIcon fontSize="small" className="text-brand-main" /></ListItemIcon>
+                    <ListItemText primary="Editar" slotProps={{ primary: { fontSize: '0.9rem' } }} />
+                </MenuItem>
+                <MenuItem onClick={handleOpenDelete}>
+                    <ListItemIcon><DeleteIcon fontSize="small" className="text-red-600" /></ListItemIcon>
+                    <ListItemText primary="Excluir" slotProps={{ primary: { fontSize: '0.9rem', color: 'error.main' } }} />
+                </MenuItem>
+            </Menu>
+
+            {/* --- MODAL DE CRIAÇÃO / EDIÇÃO --- */}
+            <Dialog open={openModal} onClose={handleCloseModal} maxWidth="sm" fullWidth>
                 <DialogTitle sx={{ borderBottom: '1px solid #E5E7EB', pb: 2 }}>
                     <Typography variant="h6" className="font-bold text-brand-dark font-sans">
-                        Novo Membro da Equipe
+                        {editingId ? 'Editar Membro' : 'Novo Membro da Equipe'}
                     </Typography>
                 </DialogTitle>
 
@@ -211,7 +279,7 @@ export default function Users() {
                                     select
                                     label="Função (Role)"
                                     fullWidth
-                                    value={watch('role') || 'OPERATOR'} // Watch garante o valor correto
+                                    value={watch('role') || 'OPERATOR'}
                                     error={!!errors.role}
                                     helperText={errors.role?.message}
                                     {...register('role')}
@@ -224,12 +292,30 @@ export default function Users() {
                     </DialogContent>
 
                     <DialogActions sx={{ p: 3, borderTop: '1px solid #E5E7EB' }}>
-                        <Button onClick={handleClose} color="inherit" sx={{ fontWeight: 'bold' }}>Cancelar</Button>
+                        <Button onClick={handleCloseModal} color="inherit" sx={{ fontWeight: 'bold' }}>Cancelar</Button>
                         <Button type="submit" variant="contained" disabled={isSubmitting} sx={{ bgcolor: 'primary.main', color: 'white', fontWeight: 'bold', boxShadow: 'none' }}>
-                            {isSubmitting ? 'Salvando...' : 'Criar Acesso'}
+                            {isSubmitting ? 'Salvando...' : (editingId ? 'Salvar Alterações' : 'Criar Acesso')}
                         </Button>
                     </DialogActions>
                 </form>
+            </Dialog>
+
+            {/* --- DIALOG DE EXCLUSÃO --- */}
+            <Dialog open={!!deleteId} onClose={() => setDeleteId(null)}>
+                <DialogTitle className="text-red-700 font-bold flex items-center gap-2">
+                    <WarningAmberIcon /> Confirmar Exclusão
+                </DialogTitle>
+                <DialogContent>
+                    <DialogContentText>
+                        Tem certeza que deseja remover este usuário? O acesso ao sistema será revogado imediatamente.
+                    </DialogContentText>
+                </DialogContent>
+                <DialogActions sx={{ p: 2 }}>
+                    <Button onClick={() => setDeleteId(null)} color="inherit" sx={{ fontWeight: 'bold' }}>Cancelar</Button>
+                    <Button onClick={confirmDelete} variant="contained" color="error" sx={{ fontWeight: 'bold', boxShadow: 'none' }}>
+                        Confirmar Exclusão
+                    </Button>
+                </DialogActions>
             </Dialog>
 
             {/* FEEDBACK */}

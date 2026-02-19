@@ -46,7 +46,7 @@ export const userService = {
         return [...MOCK_USERS];
     },
 
-    // Método CREATE
+    // Método: Create
     async create(data: Omit<UserWithStatus, 'id' | 'status' | 'lastAccess' | 'avatar'>): Promise<UserWithStatus> {
         await new Promise((resolve) => setTimeout(resolve, 800));
 
@@ -68,6 +68,35 @@ export const userService = {
 
         MOCK_USERS.push(newUser);
         return newUser;
+    },
+
+    // Método: Update
+    async update(id: string, data: Partial<UserWithStatus>): Promise<UserWithStatus> {
+        await new Promise((resolve) => setTimeout(resolve, 600));
+
+        const index = MOCK_USERS.findIndex(u => u.id === id);
+        if (index === -1) throw new Error('Usuário não encontrado');
+
+        // Se mudou o nome, regenera as iniciais do avatar
+        let avatar = MOCK_USERS[index].avatar;
+        if (data.name) {
+            avatar = data.name.split(' ').map(n => n[0]).slice(0, 2).join('').toUpperCase();
+        }
+
+        const updatedUser = {
+            ...MOCK_USERS[index],
+            ...data,
+            avatar,
+        };
+
+        MOCK_USERS[index] = updatedUser;
+        return updatedUser;
+    },
+
+    // Método: Delete
+    async delete(id: string): Promise<void> {
+        await new Promise((resolve) => setTimeout(resolve, 600));
+        MOCK_USERS = MOCK_USERS.filter(u => u.id !== id);
     }
 
 };
