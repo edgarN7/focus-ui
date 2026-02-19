@@ -1,7 +1,7 @@
 import type { Product } from '@/types/product';
 
 // Dados Mockados "Carvalho Engenharia"
-const MOCK_PRODUCTS: Product[] = [
+let MOCK_PRODUCTS: Product[] = [
     {
         id: '1',
         name: 'Cimento CP-II Z 32',
@@ -52,11 +52,26 @@ export const productService = {
     async getAll(): Promise<Product[]> {
         // Simula delay de rede (500ms)
         await new Promise((resolve) => setTimeout(resolve, 500));
-        return MOCK_PRODUCTS;
+        return [...MOCK_PRODUCTS];
+    },
+
+    // NOVA FUNÇÃO: Criar Produto
+    async create(data: Omit<Product, 'id' | 'status' | 'lastUpdated'>): Promise<Product> {
+        await new Promise((resolve) => setTimeout(resolve, 800));
+
+        const newProduct: Product = {
+            ...data,
+            id: Math.random().toString(36).slice(2, 11),
+            status: data.quantity === 0 ? 'OUT_OF_STOCK' : (data.quantity < data.minLevel ? 'LOW_STOCK' : 'IN_STOCK'),
+            lastUpdated: new Date().toISOString(),
+        };
+
+        MOCK_PRODUCTS.unshift(newProduct); // Adiciona no topo da lista
+        return newProduct;
     },
 
     async delete(id: string): Promise<void> {
         await new Promise((resolve) => setTimeout(resolve, 500));
-        console.log(`Produto ${id} deletado (Simulação)`);
+        MOCK_PRODUCTS = MOCK_PRODUCTS.filter(p => p.id !== id);
     }
 };
