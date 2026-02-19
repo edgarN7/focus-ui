@@ -55,7 +55,7 @@ export const productService = {
         return [...MOCK_PRODUCTS];
     },
 
-    // NOVA FUNÇÃO: Criar Produto
+    // FUNÇÃO: Criar Produto
     async create(data: Omit<Product, 'id' | 'status' | 'lastUpdated'>): Promise<Product> {
         await new Promise((resolve) => setTimeout(resolve, 800));
 
@@ -70,6 +70,33 @@ export const productService = {
         return newProduct;
     },
 
+    // FUNÇÃO: Atualizar
+    async update(id: string, data: Partial<Product>): Promise<Product> {
+        await new Promise((resolve) => setTimeout(resolve, 600));
+
+        const index = MOCK_PRODUCTS.findIndex(p => p.id === id);
+        if (index === -1) throw new Error('Produto não encontrado');
+
+        // Recalcula o status baseado na nova quantidade/nível
+        const quantity = data.quantity ?? MOCK_PRODUCTS[index].quantity;
+        const minLevel = data.minLevel ?? MOCK_PRODUCTS[index].minLevel;
+
+        let newStatus: Product['status'] = 'IN_STOCK';
+        if (quantity === 0) newStatus = 'OUT_OF_STOCK';
+        else if (quantity < minLevel) newStatus = 'LOW_STOCK';
+
+        const updatedProduct = {
+            ...MOCK_PRODUCTS[index],
+            ...data,
+            status: newStatus,
+            lastUpdated: new Date().toISOString()
+        };
+
+        MOCK_PRODUCTS[index] = updatedProduct;
+        return updatedProduct;
+    },
+
+    // FUNÇÃO: DELETE (Para garantir que remove do array em memória)
     async delete(id: string): Promise<void> {
         await new Promise((resolve) => setTimeout(resolve, 500));
         MOCK_PRODUCTS = MOCK_PRODUCTS.filter(p => p.id !== id);
