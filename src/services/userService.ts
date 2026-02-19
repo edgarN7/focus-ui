@@ -7,7 +7,7 @@ export interface UserWithStatus extends User {
     lastAccess: string;
 }
 
-const MOCK_USERS: UserWithStatus[] = [
+let MOCK_USERS: UserWithStatus[] = [
     {
         id: '1',
         name: 'Eleanor Rigby',
@@ -43,6 +43,31 @@ const MOCK_USERS: UserWithStatus[] = [
 export const userService = {
     async getAll(): Promise<UserWithStatus[]> {
         await new Promise((resolve) => setTimeout(resolve, 600));
-        return MOCK_USERS;
+        return [...MOCK_USERS];
+    },
+
+    // Método CREATE
+    async create(data: Omit<UserWithStatus, 'id' | 'status' | 'lastAccess' | 'avatar'>): Promise<UserWithStatus> {
+        await new Promise((resolve) => setTimeout(resolve, 800));
+
+        // Gera iniciais para o avatar (ex: "Roberto Carlos" -> "RC")
+        const initials = data.name
+            .split(' ')
+            .map(n => n[0])
+            .slice(0, 2)
+            .join('')
+            .toUpperCase();
+
+        const newUser: UserWithStatus = {
+            ...data,
+            id: Math.random().toString(36).slice(2, 11),
+            status: 'ACTIVE', // Padrão: Ativo
+            avatar: initials,
+            lastAccess: 'Nunca', // Nunca acessou
+        };
+
+        MOCK_USERS.push(newUser);
+        return newUser;
     }
+
 };
