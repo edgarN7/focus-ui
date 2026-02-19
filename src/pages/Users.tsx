@@ -41,6 +41,7 @@ export default function Users() {
         handleSubmit,
         reset,
         watch,
+        setError,
         formState: { errors, isSubmitting },
     } = useForm({
         resolver: zodResolver(userSchema),
@@ -67,6 +68,25 @@ export default function Users() {
     const handleClose = () => setOpenModal(false);
 
     const onSubmit = async (data: UserFormInputs) => {
+        // --- VALIDAÇÃO DE DUPLICIDADE ---
+
+        // 1. Verifica E-mail (Case insensitive)
+        const emailExists = users.some(u => u.email.toLowerCase() === data.email.toLowerCase());
+
+        if (emailExists) {
+            setError('email', { type: 'manual', message: 'Este e-mail já está cadastrado no sistema.' });
+            return; // Para a execução
+        }
+
+        // 2. Verifica Nome (Case insensitive)
+        const nameExists = users.some(u => u.name.toLowerCase() === data.name.toLowerCase());
+
+        if (nameExists) {
+            setError('name', { type: 'manual', message: 'Já existe um colaborador com este nome.' });
+            return; // Para a execução
+        }
+
+        // --- SE PASSOU, SALVA ---
         try {
             await userService.create(data);
             setToast({ open: true, message: 'Usuário adicionado à equipe!', severity: 'success' });
